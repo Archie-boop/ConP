@@ -18,6 +18,7 @@
 
 import time
 import socket
+import threading
 
 ####################################################
 ## Команды
@@ -46,6 +47,9 @@ SLEEP = 0.2   # время ожидания между отправкой соо
 sock = None   # переменная клиентского сокета
 sent_i = 1    # который раз мы отправляем сообщение
 DEBUG = True  # включить ли отладку всего происходящего
+KEEP_ALIVE_INTERVAL = 5  # интервал keep-alive в секундах
+_keep_alive_thread = None
+_keep_alive_stop_event = None
 
 ####################################################
 ## Функции для составления команд
@@ -139,25 +143,42 @@ def connect(server, port):
 
 	return sock, start_msg
 
-def receive_messages(stop_event, do=None):
+def _keep_alive_loop():
     global sock
-    while not stop_event.is_set():
+    while not _keep_alive_stop_event.is_set():
         try:
-            message = sock.recv(BUFFER).decode('utf-8').strip()
-            if not message:
-                break
-
-            if DEBUG:
-	            print("<3><1> <<< TCP cmd recv msg size: " + str(len(message)))
-	            print("<3><2>     " + str(decode_hex(message.encode('utf-8'))))
-	            print("<3><3> <<< " + str(message) + "\n")
-
-            if do:
-            	do(message)
+            if sock:
+                # Отправляем keep-alive команду
+				if DEBUG:
+					print("<4><1> >>> TCP cmd keep-alive")
+					print("<4><2>     " + str(decode_hex(b"/")) + "\n")
+					
+				sock.send(b"/")
         except Exception as e:
-            if not stop_event.is_set():
-                print("Ошибка при получении сообщения: " + str(e))
-            break
+            if DEBUG:
+                print(str(e))
+        _keep_alive_stop_event.wait(KEEP_ALIVE_INTERVAL)
+
+
+def start_keep_alive():
+    """Запустить keep-alive поток."""
+    global _keep_alive_thread, _keep_alive_stop_event
+    if _keep_alive_thread and _keep_alive_thread.is_alive():
+        return  # Уже запущен
+    _keep_alive_stop_event = threading.Event()
+    _keep_alive_thread = threading.Thread(target=_keep_alive_loop, daemon=True)
+    _keep_alive_thread.start()
+
+
+def stop_keep_alive():
+    """Остановить keep-alive поток."""
+    global _keep_alive_thread, _keep_alive_stop_event
+    if _keep_alive_stop_event:
+        _keep_alive_stop_event.set()
+    if _keep_alive_thread:
+        _keep_alive_thread.join(timeout=1)
+    _keep_alive_thread = None
+    _keep_alive_stop_event = None
 
 ####################################################
 ## Функции для работы с полученными сообщениями
@@ -175,6 +196,30 @@ def parse_list(prefix, msg):
         return [server.strip() for server in servers_str.split(',') if server.strip()]
     else:
         return []
+
+def receive_messages(stop_event, do=None):
+    global sock
+    while not stop_event.is_set():
+        try:
+            message = sock.recv(BUFFER).decode('utf-8').strip()
+            if not message:
+                break
+
+            # Не печатаем ответ на keep-alive
+            if message == "Unknown command.":
+                continue
+
+            if DEBUG:
+                print("<3><1> <<< TCP cmd recv msg size: " + str(len(message)))
+                print("<3><2>     " + str(decode_hex(message.encode('utf-8'))))
+                print("<3><3> <<< " + str(message) + "\n")
+
+            if do:
+                do(message)
+        except Exception as e:
+            if not stop_event.is_set():
+                print("Ошибка при получении сообщения: " + str(e))
+            break
 
                                                   ##
 ####################################################
