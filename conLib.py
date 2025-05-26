@@ -32,12 +32,18 @@ JOIN_SRV_CMD = "/join_server" # /join_server xxx
 CREATE_SRV_CMD = "/create_server" # /create_server xxx
 USERS_CMD = "/members" # /members
 HELP_CMD = "/help" # /help
+KEEP_ALIVE = "/" # keep-alive сообщение
 
 ####################################################
 ## Разделители
 
 CMD_SEP = " "  # разделитель команд
 MSG_SEP = ": " # разделитель сообщений
+
+####################################################
+## Нужные нам ответы сервера
+
+KEEP_ALIVE_ANS = "Unknown command." # ответ на keep-alive
 
 ####################################################
 ## Дополнительные параметры
@@ -144,20 +150,20 @@ def connect(server, port):
 	return sock, start_msg
 
 def _keep_alive_loop():
-    global sock
-    while not _keep_alive_stop_event.is_set():
-        try:
-            if sock:
-                # Отправляем keep-alive команду
+	global sock
+	while not _keep_alive_stop_event.is_set():
+		try:
+			if sock:
+				# Отправляем keep-alive команду
 				if DEBUG:
 					print("<4><1> >>> TCP cmd keep-alive")
-					print("<4><2>     " + str(decode_hex(b"/")) + "\n")
+					print("<4><2>     " + str(decode_hex(KEEP_ALIVE.encode('utf-8'))) + "\n")
 					
-				sock.send(b"/")
-        except Exception as e:
-            if DEBUG:
-                print(str(e))
-        _keep_alive_stop_event.wait(KEEP_ALIVE_INTERVAL)
+				sock.send(KEEP_ALIVE.encode('utf-8'))
+		except Exception as e:
+			if DEBUG:
+				print(str(e))
+		_keep_alive_stop_event.wait(KEEP_ALIVE_INTERVAL)
 
 
 def start_keep_alive():
@@ -202,12 +208,14 @@ def receive_messages(stop_event, do=None):
     while not stop_event.is_set():
         try:
             message = sock.recv(BUFFER).decode('utf-8').strip()
+
             if not message:
                 break
 
-            # Не печатаем ответ на keep-alive
-            if message == "Unknown command.":
-                continue
+            message = message.replace(KEEP_ALIVE_ANS, "")
+
+            if not messag.strip():
+            	continue
 
             if DEBUG:
                 print("<3><1> <<< TCP cmd recv msg size: " + str(len(message)))
