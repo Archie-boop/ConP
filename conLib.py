@@ -43,7 +43,7 @@ MSG_SEP = ": " # разделитель сообщений
 ####################################################
 ## Нужные нам ответы сервера
 
-KEEP_ALIVE_ANS = "Unknown command." # ответ на keep-alive
+KEEP_ALIVE_ANS = "*Ping!*" # ответ на keep-alive
 
 ####################################################
 ## Дополнительные параметры
@@ -54,8 +54,10 @@ sock = None   # переменная клиентского сокета
 sent_i = 1    # который раз мы отправляем сообщение
 DEBUG = True  # включить ли отладку всего происходящего
 KEEP_ALIVE_INTERVAL = 5  # интервал keep-alive в секундах
-_keep_alive_thread = None
-_keep_alive_stop_event = None
+_keep_alive_thread = None # значение для потока keep-alive
+_keep_alive_stop_event = None # переменная для завершение потока
+ENCODING_SEND = "utf-8" # кодировка, в которой отправляем сообщения
+ENCODING_RECEIVE = "utf-8" # кодировка, в которй принимаем сообщения
 
 ####################################################
 ## Функции для составления команд
@@ -113,10 +115,10 @@ def send_msg(msg):
 	if msg.strip():
 		time.sleep(SLEEP)
 		sent_i = sent_i + 1
-		sock.send(msg.strip().encode('utf-8'))
+		sock.send(msg.strip().encode(ENCODING_SEND))
 
 		if DEBUG:
-			print("<2><" + str(sent_i) + "> <<< " + str(decode_hex(msg.encode('utf-8'))) + "\n")
+			print("<2><" + str(sent_i) + "> <<< " + str(decode_hex(msg.encode(ENCODING_SEND))) + "\n")
 			
 		return True
 	else:
@@ -141,8 +143,8 @@ def connect(server, port):
 
 
 	if DEBUG:
-		print("<1><2> called for utf-8 TCP_CMD")
-	start_msg = start_recv.decode('utf-8')
+		print("<1><2> called for " + str(ENCODING_RECEIVE) + " TCP_CMD")
+	start_msg = start_recv.decode(ENCODING_RECEIVE)
 
 	if DEBUG:
 		print("<1><3> <<< " + str(decode_hex(start_recv)))
@@ -157,9 +159,9 @@ def _keep_alive_loop():
 				# Отправляем keep-alive команду
 				if DEBUG:
 					print("<4><1> >>> TCP cmd keep-alive")
-					print("<4><2>     " + str(decode_hex(KEEP_ALIVE.encode('utf-8'))) + "\n")
+					print("<4><2>     " + str(decode_hex(KEEP_ALIVE.encode(ENCODING_SEND))) + "\n")
 					
-				sock.send(KEEP_ALIVE.encode('utf-8'))
+				sock.send(KEEP_ALIVE.encode(ENCODING_SEND))
 		except Exception as e:
 			if DEBUG:
 				print(str(e))
@@ -207,19 +209,19 @@ def receive_messages(stop_event, do=None):
     global sock
     while not stop_event.is_set():
         try:
-            message = sock.recv(BUFFER).decode('utf-8').strip()
+            message = sock.recv(BUFFER).decode(ENCODING_RECEIVE).strip()
 
             if not message:
                 break
 
             message = message.replace(KEEP_ALIVE_ANS, "")
 
-            if not messag.strip():
+            if not message.strip():
             	continue
 
             if DEBUG:
                 print("<3><1> <<< TCP cmd recv msg size: " + str(len(message)))
-                print("<3><2>     " + str(decode_hex(message.encode('utf-8'))))
+                print("<3><2>     " + str(decode_hex(message.encode(ENCODING_RECEIVE))))
                 print("<3><3> <<< " + str(message) + "\n")
 
             if do:
